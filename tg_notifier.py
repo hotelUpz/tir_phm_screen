@@ -1,0 +1,135 @@
+import asyncio
+import aiohttp
+import random
+import time
+from typing import *
+from decimal import Decimal, getcontext
+from consts import DIFF_PCT, PRECISION, MIN_SEND_INTERVAL, TG_BOT_TOKEN, CHAT_IDS
+from c_log import UnifiedLogger
+
+logger = UnifiedLogger("tg")
+
+class TelegramNotifier:
+    def __init__(self, stop_bot: bool):
+        self.token = TG_BOT_TOKEN
+        self.chat_ids = [x.strip() for x in CHAT_IDS if x and isinstance(x, str)]
+        self.base_tg_url = f"https://api.telegram.org/bot{self.token}"
+        self.send_text_endpoint = "/sendMessage"
+        self.send_photo_endpoint = "/sendPhoto"
+        self.stop_bot = stop_bot
+        self._lock = asyncio.Lock()
+        self._last_send_time = 0.0
+
+    async def send(
+        self,
+        text: str,
+        photo_bytes: bytes = None,
+        disable_notification: bool = False,
+        max_retries: int = 2,
+    ):
+        async def _try_send(session: aiohttp.ClientSession, chat_id):
+            if photo_bytes:
+                url = self.base_tg_url + self.send_photo_endpoint
+                data = aiohttp.FormData()
+                data.add_field("chat_id", str(chat_id))
+                data.add_field("caption", text or "")
+                data.add_field("parse_mode", "HTML")
+                data.add_field("disable_web_page_preview", "true")
+                data.add_field("disable_notification", str(disable_notification).lower())
+                data.add_field("photo", photo_bytes, filename="spread.png", content_type="image/png")
+            else:
+                url = self.base_tg_url + self.send_text_endpoint
+                data = {
+                    "chat_id": chat_id,
+                    "text": text,
+                    "parse_mode": "HTML",
+                    "disable_web_page_preview": True,
+                    "disable_notification": disable_notification,
+                }
+
+            attempt = 0
+            while not self.stop_bot:
+                attempt += 1
+                async with self._lock:
+                    elapsed = time.monotonic() - self._last_send_time
+                    if elapsed < MIN_SEND_INTERVAL:
+                        await asyncio.sleep(MIN_SEND_INTERVAL - elapsed)
+                    
+                    try:
+                        async with session.post(url, data=data, timeout=10) as resp:
+                            if resp.status != 200:
+                                err_text = await resp.text()
+                                raise Exception(f"HTTP {resp.status}: {err_text}")
+                            self._last_send_time = time.monotonic()
+                            return True
+                    except Exception as e:
+                        wait_time = random.uniform(1, 3)
+                        logger.error(
+                            f"[TG] Попытка {attempt}/{max_retries} не удалась ({e}), повтор через {wait_time:.1f}с",
+                            is_print=True,
+                        )
+                        if attempt == max_retries:
+                            return False
+                        await asyncio.sleep(wait_time)
+
+        async with aiohttp.ClientSession() as session:
+            tasks = [_try_send(session, chat_id) for chat_id in self.chat_ids]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            return all(r is True for r in results)     
+
+
+class Formatter:
+    @staticmethod
+    def to_human_digit(value):
+        if value is None:
+            return "N/A"
+        getcontext().prec = PRECISION
+        dec_value = Decimal(str(value)).normalize()
+        str_val = format(dec_value, 'f')
+        if '.' in str_val:
+            str_val = str_val.rstrip('0').rstrip('.')
+        return str_val
+
+    @staticmethod
+    def format_coins_for_tg(
+        signals_data: List[Dict],
+        title: str = f"Fair > Last (Δ ≥ {DIFF_PCT}%)",
+    ) -> str:
+        """
+        Склеивает список сигналов в одно сообщение.
+        """
+        if not signals_data:
+            return ""
+
+        # lines = [f"📊 <b>{title}</b>\n"]
+        lines = [f"<b>[ {title} ]</b>\n"]
+
+        for s in signals_data:
+            prec = s.get("price_precision", 0)
+            last_price = s["last_price"]
+            fair_price = s["fair_price"]
+            diff = s["diff_percent"]
+            trend_msg = s.get("trend_msg", "-")
+
+            rounded_last = round(last_price / prec) * prec if prec > 0 else last_price
+            rounded_fair = round(fair_price / prec) * prec if prec > 0 else fair_price
+            
+            str_last = Formatter.to_human_digit(rounded_last)
+            str_fair = Formatter.to_human_digit(rounded_fair)
+
+            if diff >= DIFF_PCT:
+                icon = "🟢"
+            elif diff <= -DIFF_PCT:
+                icon = "🔴"
+            else:
+                icon = "⚪"
+
+            # Формат: #BTCUSDT
+            lines.append(
+                f"{icon} <b>#{s['symbol']}</b>\n"
+                f"L: <code>{str_last:<10}</code> F: <code>{str_fair:<10}</code>\n"
+                f"Δ: {diff:+.2f}%\n"
+                f"T: {trend_msg}\n"
+            )
+
+        return "\n".join(lines)
