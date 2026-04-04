@@ -6,7 +6,7 @@ load_dotenv()
 # ____________________
 # SIGNAL:
 # base signal
-DIFF_PCT:         float = 5.0           # % отклонения справедливой цены от горячей. fear > hot
+DIFF_PCT:         float = 1.0           # % отклонения справедливой цены от горячей. fear > hot
 SIGNAL_TTL:       float = 0.5 * 60      # 1 минутa. Если сигнал продержался в течение этого времени то его считать подтвержденным.
 FLUSH_SIGNAL_TTL: float = 5 * 60        # 5 минут. Время жизни сигнала поистечение которого он сбрасывается из кеша сигналов.
 
@@ -24,7 +24,7 @@ MAIN_FREQUENTCY: float = 0.1 # sec
 SIGNAL_FREQUENCY: float = 1 # sec
 SYMBOLS_FREQUENCY: float = 300 # sec
 
-BLACK_SET:      set   = {}     # черный список монет. Формат монеты: "BTCUSDT" и т.д.
+BLACK_SET: set = set()     # черный список монет. Формат монеты: "BTCUSDT" и т.д.
 
 TG_ENABLED: bool = True
 TG_BOT_TOKEN            = os.getenv("TG_BOT_TOKEN")

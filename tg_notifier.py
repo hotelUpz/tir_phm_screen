@@ -64,10 +64,7 @@ class TelegramNotifier:
                             return True
                     except Exception as e:
                         wait_time = random.uniform(1, 3)
-                        logger.error(
-                            f"[TG] Попытка {attempt}/{max_retries} не удалась ({e}), повтор через {wait_time:.1f}с",
-                            is_print=True,
-                        )
+                        logger.error(f"[TG] Попытка {attempt}/{max_retries} не удалась ({e}), повтор через {wait_time:.1f}с")
                         if attempt == max_retries:
                             return False
                         await asyncio.sleep(wait_time)
@@ -105,7 +102,7 @@ class Formatter:
         lines = [f"<b>[ {title} ]</b>\n"]
 
         for s in signals_data:
-            prec = s.get("price_precision", 0)
+            prec = s.get("price_precision") or 0.0001 # Даем фоллбэк напрямую
             last_price = s["last_price"]
             fair_price = s["fair_price"]
             diff = s["diff_percent"]

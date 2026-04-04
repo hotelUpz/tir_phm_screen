@@ -1,9 +1,8 @@
-# import asyncio
 import time
-import pandas_ta as ta
 import pandas as pd
-from typing import *
+from typing import Optional, Dict, List, Tuple
 from consts import DIFF_PCT, SIGNAL_TTL, FLUSH_SIGNAL_TTL, TREND_LINE, BLACK_SET
+
 
 class FairSignalDetector:
     """
@@ -69,6 +68,7 @@ class FairSignalDetector:
 class TrendConfirmSignal:
     """
     Проверяет направление тренда по короткой и длинной EMA.
+    (Использует встроенный Pandas EWM, без тяжеловесного pandas_ta)
     """
     def __init__(self, trend_config: dict = None):
         self.trend_cfg = trend_config or TREND_LINE
@@ -87,8 +87,10 @@ class TrendConfirmSignal:
             return None
 
         df = df.copy()
-        df['ema_fast'] = ta.ema(df['Close'], length=self.fast)
-        df['ema_slow'] = ta.ema(df['Close'], length=self.slow)
+        
+        # Нативный расчет EMA через Pandas 
+        df['ema_fast'] = df['Close'].ewm(span=self.fast, adjust=False).mean()
+        df['ema_slow'] = df['Close'].ewm(span=self.slow, adjust=False).mean()
 
         last_row = df.iloc[-1]
         fast_val, slow_val = last_row['ema_fast'], last_row['ema_slow']

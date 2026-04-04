@@ -60,7 +60,6 @@ class PhemexPublicApi:
         precisions = {}
         for sym, item in self.instruments.items():
             raw_tick = item.get("tickSize")
-            print(raw_tick)
             try:
                 precisions[sym] = float(raw_tick) if raw_tick else 0.0001
             except:

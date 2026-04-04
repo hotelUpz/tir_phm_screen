@@ -29,6 +29,9 @@ class Core:
         # Переменные для контроля сессии
         self._session: Optional[aiohttp.ClientSession] = None
         self._session_lock = asyncio.Lock()
+        
+        # Хранилище фоновых задач (чтобы их не удалял сборщик мусора)
+        self.bg_tasks: set[asyncio.Task] = set()
 
     async def get_session(self) -> aiohttp.ClientSession:
         """
@@ -97,7 +100,7 @@ class Core:
                 continue # Пропускаем монету, но не роняем весь цикл
 
             trend = self.signal_confirm.detect_trend(klines)
-            if trend not in (None, "UP"):
+            if trend != "UP":
                 logger.debug(f"📈 Тренд НЕ подтверждён для {signal_symbol}. Пропускаем.")
                 continue
 
@@ -121,13 +124,16 @@ class Core:
         if valid_signals and TG_ENABLED:
             report_text = Formatter.format_coins_for_tg(valid_signals)
             if report_text:
-                asyncio.create_task(self.notifier.send(text=report_text))
+                # Грамотный запуск и трекинг фоновых задач отправки
+                task = asyncio.create_task(self.notifier.send(text=report_text))
+                self.bg_tasks.add(task)
+                task.add_done_callback(self.bg_tasks.discard)
 
     async def _run(self):
         logger.info("[INFO] ✨ Скринер начал работу.")
 
-        # Больше нет жесткого блока async with. Сессия живет своей жизнью.
-        asyncio.create_task(self.symbols_state_updater())        
+        # Сохраняем таску апдейтера как атрибут для корректного закрытия
+        self.updater_task = asyncio.create_task(self.symbols_state_updater())        
         
         try:
             await asyncio.wait_for(self.symbols_state_event.wait(), timeout=30.0)
@@ -146,11 +152,37 @@ class Core:
                     signal_updating_time = now
                     await self.process_signals()
 
+            except asyncio.CancelledError:
+                break
             except Exception as ex:
                 tb = traceback.format_exc()
-                logger.exception(f"ОШИБКА в основном цикле: {ex}\n{tb}", is_print=True)
+                logger.exception(f"ОШИБКА в основном цикле: {ex}\n{tb}")
 
             await asyncio.sleep(MAIN_FREQUENTCY)
+
+    async def shutdown(self):
+        """Мягко завершает все запущенные процессы и сессии"""
+        logger.info("Остановка скринера, закрытие сессий и задач...")
+        self.stop_bot = True
+        self.notifier.stop_bot = True
+
+        # Отменяем таску обновления символов
+        if hasattr(self, 'updater_task') and not self.updater_task.done():
+            self.updater_task.cancel()
+            try:
+                await self.updater_task
+            except asyncio.CancelledError:
+                pass
+
+        # Дожидаемся завершения отправки уже подготовленных сообщений в ТГ
+        if self.bg_tasks:
+            logger.info(f"Ожидание завершения {len(self.bg_tasks)} фоновых задач...")
+            await asyncio.gather(*self.bg_tasks, return_exceptions=True)
+
+        # Закрываем сессию
+        await self.close_session()
+        logger.info("Все процессы корректно завершены.")
+
 
 async def main():
     instance = Core()
@@ -161,9 +193,7 @@ async def main():
     except KeyboardInterrupt:
         print("\n⛔ Остановка по Ctrl+C")
     finally:
-        instance.stop_bot = True
-        print("Сессии закрываются...")
-        await instance.close_session()
+        await instance.shutdown()
 
 if __name__ == "__main__":
     try:
