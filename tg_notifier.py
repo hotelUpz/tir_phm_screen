@@ -3,7 +3,7 @@ import aiohttp
 import random
 import time
 from typing import *
-from decimal import Decimal, getcontext
+from decimal import Decimal, getcontext, ROUND_HALF_UP
 from consts import HOT_FAIR_PATTERN, PRECISION, MIN_SEND_INTERVAL, TG_BOT_TOKEN, CHAT_IDS
 from c_log import UnifiedLogger
 
@@ -74,13 +74,13 @@ class TelegramNotifier:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             return all(r is True for r in results)     
 
-
 class Formatter:
     @staticmethod
     def to_human_digit(value):
         if value is None:
             return "N/A"
         getcontext().prec = PRECISION
+        # Нормализуем и отсекаем нули чисто математически
         dec_value = Decimal(str(value)).normalize()
         str_val = format(dec_value, 'f')
         if '.' in str_val:
@@ -103,15 +103,23 @@ class Formatter:
         lines = [f"<b>[ {title} ]</b>\n"]
 
         for s in signals_data:
-            prec = s.get("price_precision") or 0.0001
-            last_price = s["last_price"]
-            fair_price = s["fair_price"]
-            diff = s["diff_percent"]            
-            stakan_msg = s.get("stakan_msg", "---")
-            trend_msg = s.get("trend_msg", "---")
+            # 🛑 ФИКС ОКРУГЛЕНИЯ: Переводим всё в Decimal для точной математики без багов Float
+            prec_str = str(s.get("price_precision") or 0.0001)
+            prec_dec = Decimal(prec_str)
+            
+            last_dec = Decimal(str(s["last_price"]))
+            fair_dec = Decimal(str(s["fair_price"]))
+            diff = s["diff_percent"]
+            trend_msg = s.get("trend_msg", "-")
+            stakan_msg = s.get("stakan_msg", "-")
 
-            rounded_last = round(last_price / prec) * prec if prec > 0 else last_price
-            rounded_fair = round(fair_price / prec) * prec if prec > 0 else fair_price
+            # Железобетонное округление кратно шагу цены биржи
+            if prec_dec > 0:
+                rounded_last = (last_dec / prec_dec).quantize(Decimal('1'), rounding=ROUND_HALF_UP) * prec_dec
+                rounded_fair = (fair_dec / prec_dec).quantize(Decimal('1'), rounding=ROUND_HALF_UP) * prec_dec
+            else:
+                rounded_last = last_dec
+                rounded_fair = fair_dec
             
             str_last = Formatter.to_human_digit(rounded_last)
             str_fair = Formatter.to_human_digit(rounded_fair)
@@ -127,8 +135,66 @@ class Formatter:
                 f"{icon} <b>#{s['symbol']}</b>\n"
                 f"L: <code>{str_last:<10}</code> F: <code>{str_fair:<10}</code>\n"
                 f"Δ: {diff:+.2f}%\n"
-                f"G: {stakan_msg}\n"
+                f"S: {stakan_msg}\n"
                 f"T: {trend_msg}\n"
             )
 
         return "\n".join(lines)
+    
+# class Formatter:
+#     @staticmethod
+#     def to_human_digit(value):
+#         if value is None:
+#             return "N/A"
+#         getcontext().prec = PRECISION
+#         dec_value = Decimal(str(value)).normalize()
+#         str_val = format(dec_value, 'f')
+#         if '.' in str_val:
+#             str_val = str_val.rstrip('0').rstrip('.')
+#         return str_val
+
+#     @staticmethod
+#     def format_coins_for_tg(
+#         signals_data: List[Dict],
+#         title: str = None,
+#     ) -> str:
+        
+#         diff_cfg = HOT_FAIR_PATTERN.get("spread", 1.0)
+#         if not title:
+#             title = f"Fair > Last (Δ ≥ {diff_cfg}%)"
+
+#         if not signals_data:
+#             return ""
+
+#         lines = [f"<b>[ {title} ]</b>\n"]
+
+#         for s in signals_data:
+#             prec = s.get("price_precision") or 0.0001
+#             last_price = s["last_price"]
+#             fair_price = s["fair_price"]
+#             diff = s["diff_percent"]            
+#             stakan_msg = s.get("stakan_msg", "---")
+#             trend_msg = s.get("trend_msg", "---")
+
+#             rounded_last = round(last_price / prec) * prec if prec > 0 else last_price
+#             rounded_fair = round(fair_price / prec) * prec if prec > 0 else fair_price
+            
+#             str_last = Formatter.to_human_digit(rounded_last)
+#             str_fair = Formatter.to_human_digit(rounded_fair)
+
+#             if diff >= diff_cfg:
+#                 icon = "🟢"
+#             elif diff <= -diff_cfg:
+#                 icon = "🔴"
+#             else:
+#                 icon = "⚪"
+
+#             lines.append(
+#                 f"{icon} <b>#{s['symbol']}</b>\n"
+#                 f"L: <code>{str_last:<10}</code> F: <code>{str_fair:<10}</code>\n"
+#                 f"Δ: {diff:+.2f}%\n"
+#                 f"G: {stakan_msg}\n"
+#                 f"T: {trend_msg}\n"
+#             )
+
+#         return "\n".join(lines)

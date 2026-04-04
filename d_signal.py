@@ -17,6 +17,7 @@ class FairSignalDetector:
         self.diff_pct = abs(HOT_FAIR_PATTERN.get("spread", 1.0))
         self.ttl = HOT_FAIR_PATTERN.get("ttl", 6.0)
         self.flush_ttl = HOT_FAIR_PATTERN.get("flush_ttl", 300.0)
+        self.flush_set = set()
 
     async def check(
         self,
@@ -51,6 +52,7 @@ class FairSignalDetector:
             # Удаляем "протухшие" сигналы из кэша (сброс кулдауна)
             if in_signal and diff_time > self.flush_ttl:
                 self.signals_cache.pop(symbol, None)
+                self.flush_set.discard(symbol)
                 in_signal = False
                 record_time = now
                 diff_time = 0
@@ -62,8 +64,9 @@ class FairSignalDetector:
                     self.signals_cache[symbol] = (record_time, diff_percent, is_sent)
                     
                 if diff_time >= self.ttl and not is_sent:
-                    confirmed_signals.append((symbol, diff_percent))
-                    # self.signals_cache[symbol] = (record_time, diff_percent, True)
+                    if symbol not in self.flush_set:
+                        confirmed_signals.append((symbol, diff_percent))
+                        self.flush_set.add(symbol)
             else:
                 if in_signal: 
                     self.signals_cache.pop(symbol, None)
