@@ -81,13 +81,7 @@ class Core:
                 # Управление потоком WebSocket (перезапуск, если обновились символы)
                 current_symbols = set(self.phm_public.filtered_symbols)
                 if current_symbols:
-                    if self.stakan_stream is None or set(self.stakan_stream.symbols) != current_symbols:
-                        if self.stakan_stream is not None:
-                            logger.info("🔄 Перезапуск WS стакана (изменились символы)...")
-                            self.stakan_stream.stop()
-                            if self.stakan_task:
-                                await self.stakan_task
-                        
+                    if self.stakan_stream is None:
                         logger.info(f"🌐 Инициализация WS стакана для {len(current_symbols)} пар...")
                         self.stakan_stream = PhemexStakanStream(
                             symbols=current_symbols,
@@ -97,6 +91,30 @@ class Core:
                         self.stakan_task = asyncio.create_task(self.stakan_stream.run(self.on_depth_update))
                         self.bg_tasks.add(self.stakan_task)
                         self.stakan_task.add_done_callback(self.bg_tasks.discard)
+                    else:
+                        old_symbols = set(self.stakan_stream.symbols)
+                        added = current_symbols - old_symbols
+                        removed = old_symbols - current_symbols
+                        
+                        # Перезапускаем ТОЛЬКО если появились реально новые монеты
+                        if added:
+                            logger.info(f"🔄 Перезапуск WS стакана: добавлено {len(added)} новых монет. (Пропало: {len(removed)})")
+                            self.stakan_stream.stop()
+                            if self.stakan_task:
+                                await self.stakan_task
+                            
+                            logger.info(f"🌐 Ре-Инициализация WS стакана для {len(current_symbols)} пар...")
+                            self.stakan_stream = PhemexStakanStream(
+                                symbols=current_symbols,
+                                depth=STAKAN_PATTERN.get("depth", 5),
+                                chunk_size=40
+                            )
+                            self.stakan_task = asyncio.create_task(self.stakan_stream.run(self.on_depth_update))
+                            self.bg_tasks.add(self.stakan_task)
+                            self.stakan_task.add_done_callback(self.bg_tasks.discard)
+                        elif removed:
+                            # Если монеты ушли в делинг/техработы — не рвём коннект ради них
+                            logger.debug(f"ℹ️ С биржи временно пропало {len(removed)} монет. WS продолжает работу без перезапуска.")
 
                 await asyncio.sleep(SYMBOLS_FREQUENCY)
 
@@ -129,11 +147,6 @@ class Core:
             return
 
         for signal_symbol, diff_percent in signals:
-            
-            # # 0. ЯВНАЯ ПРОВЕРКА АНТИСПАМА
-            # if signal_symbol in self.signal_detector.ban_cache:
-            #     # logger.debug(f"Сигнал в антиспаме {signal_symbol}.")
-            #     continue
 
             # 1. Получаем точность и плечо (с безопасным дефолтом!)
             prec, max_lvg = precisions.get(signal_symbol, (0.0001, 10.0))
