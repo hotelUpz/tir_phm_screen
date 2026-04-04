@@ -106,6 +106,10 @@ class Core:
         precisions = self.phm_public.get_precisions()
 
         for signal_symbol, diff_percent in signals:
+            if signal_symbol in self.signal_detector.ban_cache:
+                # logger.info(f"Сигнал в антиспаме {signal_symbol}.")
+                continue
+
             # 1. Проверка СТАКАНА (O(1) чтение из кэша детектора)
             if not self.stakan_detector.is_valid(signal_symbol):
                 logger.debug(f"📉 Стакан НЕ подтверждён для {signal_symbol}. Пропускаем.")

@@ -7,17 +7,29 @@ from c_log import UnifiedLogger
 logger = UnifiedLogger("signal")
 
 
+import time
+import pandas as pd
+from typing import Optional, Dict, List, Tuple
+from consts import HOT_FAIR_PATTERN, STAKAN_PATTERN, TREND_PATTERN, BLACK_SET
+from c_log import UnifiedLogger
+
+logger = UnifiedLogger("signal")
+
+
 class FairSignalDetector:
     """
     Отслеживает расхождение справедливой и горячей цены.
     Возвращает СПИСОК всех созревших сигналов.
     """
     def __init__(self):
-        self.signals_cache: Dict[str, Tuple[float, float, bool]] = {}  
+        # Хранит время старта накопления сигнала: {symbol: start_time}
+        self.signals_cache: Dict[str, float] = {}  
+        # Хранит время начала бана: {symbol: ban_start_time}
+        self.ban_cache: Dict[str, float] = {}      
+        
         self.diff_pct = abs(HOT_FAIR_PATTERN.get("spread", 1.0))
         self.ttl = HOT_FAIR_PATTERN.get("ttl", 6.0)
         self.flush_ttl = HOT_FAIR_PATTERN.get("flush_ttl", 300.0)
-        self.flush_set = set()
 
     async def check(
         self,
@@ -35,49 +47,42 @@ class FairSignalDetector:
             if not last_price or not fair_price:
                 continue
 
+            # 1. Проверяем БАН-ЛИСТ (независимо от текущей цены!)
+            if symbol in self.ban_cache:
+                if now - self.ban_cache[symbol] > self.flush_ttl:
+                    # Срок бана вышел — амнистия
+                    del self.ban_cache[symbol]
+                else:
+                    # 🛑 КРИТИЧНО: Если монета в бане, удаляем из кэша и делаем continue!
+                    # Иначе она пойдет ниже, снова наберет TTL и будет долбить ядро.
+                    self.signals_cache.pop(symbol, None)
+                    continue
+
+            # 2. Основная логика удержания сигнала
             diff_percent = (fair_price - last_price) / last_price * 100            
 
-            # Извлекаем данные из кэша
-            signal_data = self.signals_cache.get(symbol)
-            if signal_data:
-                record_time, _, is_sent = signal_data
-                diff_time = now - record_time
-                in_signal = True
-            else:
-                record_time = now
-                is_sent = False
-                diff_time = 0
-                in_signal = False
-
-            # Удаляем "протухшие" сигналы из кэша (сброс кулдауна)
-            if in_signal and diff_time > self.flush_ttl:
-                self.signals_cache.pop(symbol, None)
-                self.flush_set.discard(symbol)
-                in_signal = False
-                record_time = now
-                diff_time = 0
-                is_sent = False
-
-            # --- основное условие ---
             if diff_percent >= self.diff_pct: 
-                if not in_signal:
-                    self.signals_cache[symbol] = (record_time, diff_percent, is_sent)
+                # Фиксируем время старта, если монеты еще нет в кэше
+                if symbol not in self.signals_cache:
+                    self.signals_cache[symbol] = now
                     
-                if diff_time >= self.ttl and not is_sent:
-                    if symbol not in self.flush_set:
-                        confirmed_signals.append((symbol, diff_percent))
-                        self.flush_set.add(symbol)
+                # Если удержали ttl — отдаем ядру
+                if now - self.signals_cache[symbol] >= self.ttl:
+                    confirmed_signals.append((symbol, diff_percent))
+                    # Внимание: мы не баним монету здесь! Ждем команды от ядра.
             else:
-                if in_signal: 
-                    self.signals_cache.pop(symbol, None)
+                # Цена упала — сбрасываем накопление времени
+                self.signals_cache.pop(symbol, None)
 
         return confirmed_signals
     
     def confirm_sent(self, symbol: str):
-        """Вызывается ядром ТОЛЬКО ПОСЛЕ успешного прохождения всех фильтров (стакан, тренд)"""
-        if symbol in self.signals_cache:
-            record_time, diff, _ = self.signals_cache[symbol]
-            self.signals_cache[symbol] = (record_time, diff, True)
+        """
+        Вызывается ядром ТОЛЬКО ПОСЛЕ того, как сигнал прошел стакан, тренд и улетел в ТГ.
+        Вешает железобетонный бан на flush_ttl секунд.
+        """
+        self.ban_cache[symbol] = time.time()
+        self.signals_cache.pop(symbol, None)
     
     
 class StakanDetector:
