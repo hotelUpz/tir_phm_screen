@@ -173,6 +173,8 @@ if __name__ == "__main__":
 
 
 # chmod 600 ssh_key.txt
+# chmod 600 ssh_key.pub
+# chmod 600 .ssh-autostart.sh
 # eval "$(ssh-agent -s)"
 # ssh-add ssh_key.txt
 # source .ssh-autostart.sh
