@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 import pytz
-
 from consts import LOG_DEBUG, LOG_ERROR, LOG_INFO, LOG_WARNING, MAX_LOG_LINES, TIME_ZONE
 
 

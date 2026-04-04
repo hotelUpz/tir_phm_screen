@@ -99,7 +99,7 @@ class Core:
                 logger.error(f"❌ Ошибка загрузки свечей для {signal_symbol}: {e}")
                 continue # Пропускаем монету, но не роняем весь цикл
 
-            trend = self.signal_confirm.detect_trend(klines)
+            trend = self.signal_confirm.detect_trend(klines, signal_symbol)
             if trend != "UP":
                 logger.debug(f"📈 Тренд НЕ подтверждён для {signal_symbol}. Пропускаем.")
                 continue
