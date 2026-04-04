@@ -92,6 +92,11 @@ class Core:
                         self.bg_tasks.add(self.stakan_task)
                         self.stakan_task.add_done_callback(self.bg_tasks.discard)
                     else:
+                        # old_symbols = set(self.stakan_stream.symbols)
+                        # current_ws_symbols = {s.upper().strip() for s in current_symbols}
+                        # added = current_ws_symbols - old_symbols
+                        # removed = old_symbols - current_ws_symbols
+
                         old_symbols = set(self.stakan_stream.symbols)
                         added = current_symbols - old_symbols
                         removed = old_symbols - current_symbols
@@ -157,7 +162,7 @@ class Core:
 
             # 3. Проверка СТАКАНА
             if not self.stakan_detector.is_valid(signal_symbol):
-                logger.debug(f"📉 Стакан НЕ подтверждён для {signal_symbol}. Пропускаем.")
+                # logger.debug(f"📉 Стакан НЕ подтверждён для {signal_symbol}. Пропускаем.")
                 continue
 
             # 4. Проверка ТРЕНДА (С использованием КЭША свечей)
@@ -181,7 +186,7 @@ class Core:
 
             trend = self.signal_confirm.detect_trend(klines, signal_symbol)
             if trend != "UP":
-                logger.debug(f"📈 Тренд НЕ подтверждён для {signal_symbol}. Пропускаем.")
+                # logger.debug(f"📈 Тренд НЕ подтверждён для {signal_symbol}. Пропускаем.")
                 continue
             
             stakan_msg = "OK" if STAKAN_PATTERN.get("enable") else "N/A"
@@ -289,3 +294,6 @@ if __name__ == "__main__":
 
 # export ANTHROPIC_API_KEY=...
 # claude
+
+# python -m pip install --upgrade pip
+# pip install -r requirements.txt

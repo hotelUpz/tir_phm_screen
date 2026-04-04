@@ -5,6 +5,7 @@ from consts import (
     HOT_FAIR_PATTERN,
     STAKAN_PATTERN,
     TREND_PATTERN,
+    FLUSH_SIGNAL_TTL,
     BLACK_SET,
 )
 from c_log import UnifiedLogger
@@ -25,7 +26,7 @@ class FairSignalDetector:
         
         self.diff_pct = abs(HOT_FAIR_PATTERN.get("spread", 1.0))
         self.ttl = HOT_FAIR_PATTERN.get("ttl", 6.0)
-        self.flush_ttl = HOT_FAIR_PATTERN.get("flush_ttl", 300.0)
+        self.flush_ttl = FLUSH_SIGNAL_TTL or 0.0
 
     async def check(
         self,
@@ -48,6 +49,7 @@ class FairSignalDetector:
                 if now - self.ban_cache[symbol] > self.flush_ttl:
                     # Срок бана вышел — амнистия
                     del self.ban_cache[symbol]
+                    logger.debug(f"Монета {symbol} изъята из ban_cache спамера сигналов.")
                 else:
                     # 🛑 КРИТИЧНО: Если монета в бане, удаляем из кэша и делаем continue!
                     # Иначе она пойдет ниже, снова наберет TTL и будет долбить ядро.
@@ -168,10 +170,10 @@ class TrendConfirmSignal:
         fast_val, slow_val = last_row['ema_fast'], last_row['ema_slow']
         current_price = last_row['Close']
 
-        logger.debug(
-            f"📊 [{symbol}] Price: {current_price:.5g} | "
-            f"EMA({self.fast}): {fast_val:.5g} | EMA({self.slow}): {slow_val:.5g}"
-        )
+        # logger.debug(
+        #     f"📊 [{symbol}] Price: {current_price:.5g} | "
+        #     f"EMA({self.fast}): {fast_val:.5g} | EMA({self.slow}): {slow_val:.5g}"
+        # )
 
         if pd.isna(fast_val) or pd.isna(slow_val):
             return None

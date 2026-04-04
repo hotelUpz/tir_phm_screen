@@ -41,14 +41,19 @@ class PhemexPublicApi:
             for item in arr:
                 if not isinstance(item, dict): continue
                 
-                sym = item.get("symbol", "")
+                sym = str(item.get("symbol", "")).strip()
                 quote = str(item.get("quoteCurrency") or item.get("settleCurrency") or "").upper().strip()
                 status = str(item.get("status") or item.get("state") or item.get("symbolStatus") or "").strip().lower()
                 is_active = not any(word in status for word in ("delist", "suspend", "pause", "settle", "close", "expired"))
                 
                 if sym and not sym.startswith("s") and quote == "USDT" and is_active:
-                    item["_parsed_price_scale"] = float(item.get("priceScale", 10000.0))
-                    instruments[sym] = item
+                    sym_u = sym.upper()
+                    # Элегантная распаковка с перезаписью нужных полей
+                    instruments[sym_u] = {
+                        **item,
+                        "symbol": sym_u,
+                        "_parsed_price_scale": float(item.get("priceScale", 10000.0))
+                    }
                     
             if not instruments: 
                 logger.warning("No perpetual USDT symbols found in exchange info")
@@ -58,6 +63,40 @@ class PhemexPublicApi:
             self.filtered_symbols = set(self.instruments.keys())
         except Exception as ex:
             logger.exception(f"{ex} in {inspect.currentframe().f_code.co_name}")
+
+    # async def update_filtered_symbols(self, session: aiohttp.ClientSession):
+    #     """Получаем список доступных торговых символов PERPETUAL USDT"""
+    #     try:
+    #         async with session.get(self.exchangeInfo_url) as response:
+    #             if response.status != 200:
+    #                 logger.error(f"Failed to fetch exchange info: {response.status}")
+    #                 return
+    #             data = await response.json()
+                
+    #         root = data.get("data", {})
+    #         arr = root.get("perpProductsV2") or root.get("perpProducts") or []
+            
+    #         instruments = {}
+    #         for item in arr:
+    #             if not isinstance(item, dict): continue
+                
+    #             sym = item.get("symbol", "")
+    #             quote = str(item.get("quoteCurrency") or item.get("settleCurrency") or "").upper().strip()
+    #             status = str(item.get("status") or item.get("state") or item.get("symbolStatus") or "").strip().lower()
+    #             is_active = not any(word in status for word in ("delist", "suspend", "pause", "settle", "close", "expired"))
+                
+    #             if sym and not sym.startswith("s") and quote == "USDT" and is_active:
+    #                 item["_parsed_price_scale"] = float(item.get("priceScale", 10000.0))
+    #                 instruments[sym] = item
+                    
+    #         if not instruments: 
+    #             logger.warning("No perpetual USDT symbols found in exchange info")
+    #             return  
+                
+    #         self.instruments = instruments
+    #         self.filtered_symbols = set(self.instruments.keys())
+    #     except Exception as ex:
+    #         logger.exception(f"{ex} in {inspect.currentframe().f_code.co_name}")
 
     def get_precisions(self) -> dict[str, tuple[float, float]]:
         """Возвращает шаг изменения цены (tick size)"""
