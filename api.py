@@ -1,8 +1,8 @@
-# API/PHEMEX/client.py
+# api.py
 
-# import asyncio
+import asyncio
 import aiohttp
-# from typing import Dict, Optional
+import time
 import pandas as pd
 from c_log import UnifiedLogger
 import inspect
@@ -14,12 +14,16 @@ class PhemexPublicApi:
     def __init__(self):
         self.base_url = 'https://api.phemex.com'
         self.exchangeInfo_url = f'{self.base_url}/public/products'
-        # Используем эндпоинт /last для получения свечей по лимиту
         self.klines_url = f'{self.base_url}/exchange/public/md/v2/kline/last'
         self.ticker_v3_url = f'{self.base_url}/md/v3/ticker/24hr/all'
 
         self.filtered_symbols: set[str] = set()
         self.instruments: dict[str, dict] = {}
+
+        # Лимитер запросов (Rate Limiter) для защиты от бана API
+        self._kline_lock = asyncio.Lock()
+        self._last_kline_time = 0.0
+        self.kline_interval = 0.15  # мин. время между запросами свечей (сек)
 
     async def update_filtered_symbols(self, session: aiohttp.ClientSession):
         """Получаем список доступных торговых символов PERPETUAL USDT"""
@@ -96,16 +100,29 @@ class PhemexPublicApi:
             interval: str,
             limit: int):
         """Загружает свечи и возвращает DataFrame с колонкой Close"""
+        
+        # 1. Защита от спама (Rate Limiting)
+        async with self._kline_lock:
+            elapsed = time.monotonic() - self._last_kline_time
+            if elapsed < self.kline_interval:
+                await asyncio.sleep(self.kline_interval - elapsed)
+            self._last_kline_time = time.monotonic()
+
         res_map = {
             "1m": 60, "5m": 300, "15m": 900, "30m": 1800,
             "1h": 3600, "4h": 14400, "1d": 86400
         }
         resolution = res_map.get(interval, 60)
         
+        # 2. УЗКОЕ ГОРЛЫШКО ИСПРАВЛЕНО: Phemex принимает только строгие значения limit
+        allowed_limits = [5, 10, 50, 100, 500, 1000]
+        # Ищем минимально подходящий лимит из разрешенных биржей
+        valid_limit = next((l for l in allowed_limits if l >= limit), 1000)
+        
         params = {
             "symbol": symbol, 
             "resolution": int(resolution), 
-            "limit": int(limit)
+            "limit": valid_limit
         }
 
         try:
@@ -122,12 +139,10 @@ class PhemexPublicApi:
                 return pd.DataFrame(columns=['Close'])
 
             # ОПРЕДЕЛЯЕМ МАСШТАБ (SCALE) БЕЗОПАСНО
-            # Если в инструментах scale <= 0 или отсутствует, считаем через tickSize
             inst = self.instruments.get(symbol, {})
             scale = inst.get("_parsed_price_scale", 0)
             
             if scale <= 0:
-                # Если scale не задан, используем tickSize (например, 0.0001 -> scale 10000)
                 tick = float(inst.get("tickSize", 0.0001))
                 scale = 1 / tick if tick > 0 else 10000.0
 
