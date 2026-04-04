@@ -4,7 +4,7 @@ import random
 import time
 from typing import *
 from decimal import Decimal, getcontext
-from consts import DIFF_PCT, PRECISION, MIN_SEND_INTERVAL, TG_BOT_TOKEN, CHAT_IDS
+from consts import HOT_FAIR_PATTERN, PRECISION, MIN_SEND_INTERVAL, TG_BOT_TOKEN, CHAT_IDS
 from c_log import UnifiedLogger
 
 logger = UnifiedLogger("tg")
@@ -90,23 +90,25 @@ class Formatter:
     @staticmethod
     def format_coins_for_tg(
         signals_data: List[Dict],
-        title: str = f"Fair > Last (Δ ≥ {DIFF_PCT}%)",
+        title: str = None,
     ) -> str:
-        """
-        Склеивает список сигналов в одно сообщение.
-        """
+        
+        diff_cfg = HOT_FAIR_PATTERN.get("spread", 1.0)
+        if not title:
+            title = f"Fair > Last (Δ ≥ {diff_cfg}%)"
+
         if not signals_data:
             return ""
 
-        # lines = [f"📊 <b>{title}</b>\n"]
         lines = [f"<b>[ {title} ]</b>\n"]
 
         for s in signals_data:
-            prec = s.get("price_precision") or 0.0001 # Даем фоллбэк напрямую
+            prec = s.get("price_precision") or 0.0001
             last_price = s["last_price"]
             fair_price = s["fair_price"]
-            diff = s["diff_percent"]
-            trend_msg = s.get("trend_msg", "-")
+            diff = s["diff_percent"]            
+            stakan_msg = s.get("stakan_msg", "---")
+            trend_msg = s.get("trend_msg", "---")
 
             rounded_last = round(last_price / prec) * prec if prec > 0 else last_price
             rounded_fair = round(fair_price / prec) * prec if prec > 0 else fair_price
@@ -114,18 +116,18 @@ class Formatter:
             str_last = Formatter.to_human_digit(rounded_last)
             str_fair = Formatter.to_human_digit(rounded_fair)
 
-            if diff >= DIFF_PCT:
+            if diff >= diff_cfg:
                 icon = "🟢"
-            elif diff <= -DIFF_PCT:
+            elif diff <= -diff_cfg:
                 icon = "🔴"
             else:
                 icon = "⚪"
 
-            # Формат: #BTCUSDT
             lines.append(
                 f"{icon} <b>#{s['symbol']}</b>\n"
                 f"L: <code>{str_last:<10}</code> F: <code>{str_fair:<10}</code>\n"
                 f"Δ: {diff:+.2f}%\n"
+                f"G: {stakan_msg}\n"
                 f"T: {trend_msg}\n"
             )
 
