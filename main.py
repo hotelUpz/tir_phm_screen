@@ -5,7 +5,15 @@ from typing import *
 import traceback
 import pandas as pd
 
-from consts import MAIN_FREQUENTCY, SYMBOLS_FREQUENCY, SIGNAL_FREQUENCY, TREND_PATTERN, TG_ENABLED, STAKAN_PATTERN
+from consts import (
+    MAIN_FREQUENTCY,
+    SYMBOLS_FREQUENCY,
+    SIGNAL_FREQUENCY,
+    MIN_LEVERAGE,
+    TREND_PATTERN,
+    TG_ENABLED,
+    STAKAN_PATTERN
+)
 
 from api import PhemexPublicApi
 from api_ws import PhemexStakanStream, DepthTop
@@ -108,14 +116,17 @@ class Core:
             await self.close_session() 
             return
 
-        if not price_data: return
+        if not price_data: return        
 
-        precisions = self.phm_public.get_precisions()
-
-        signals = await self.signal_detector.check(price_data, precisions)
+        signals = await self.signal_detector.check(price_data)
         if not signals: return
 
         valid_signals = []
+        
+        precisions = self.phm_public.get_precisions()
+        if not precisions:
+            logger.warning(f"❌ Не удается получить precisions.")
+            return
 
         for signal_symbol, diff_percent in signals:
             
@@ -124,12 +135,19 @@ class Core:
                 # logger.debug(f"Сигнал в антиспаме {signal_symbol}.")
                 continue
 
-            # 1. Проверка СТАКАНА
+            # 1. Получаем точность и плечо (с безопасным дефолтом!)
+            prec, max_lvg = precisions.get(signal_symbol, (0.0001, 10.0))
+            
+            # 2. ФИЛЬТР ПЛЕЧА (скипаем всё, что от 1 до 10)
+            # Конфиг можно тянуть из consts, например LEVERAGE_SKIP_RANGE = (1, 10)
+            if MIN_LEVERAGE is not None and max_lvg <= MIN_LEVERAGE: continue
+
+            # 3. Проверка СТАКАНА
             if not self.stakan_detector.is_valid(signal_symbol):
                 logger.debug(f"📉 Стакан НЕ подтверждён для {signal_symbol}. Пропускаем.")
                 continue
 
-            # 2. Проверка ТРЕНДА (С использованием КЭША свечей)
+            # 4. Проверка ТРЕНДА (С использованием КЭША свечей)
             try:
                 if signal_symbol in self.klines_cache:
                     klines = self.klines_cache[signal_symbol][1]
@@ -157,7 +175,6 @@ class Core:
             trend_msg = trend if TREND_PATTERN.get(self.signal_confirm.tf, {}).get("enable") else "N/A"
             last_price = price_data.get(signal_symbol, {}).get("hot", 0)
             fair_price = price_data.get(signal_symbol, {}).get("fair", 0)
-            prec, _ = precisions.get(signal_symbol, 0.0001)
 
             valid_signals.append({
                 "symbol": signal_symbol,
