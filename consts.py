@@ -46,7 +46,7 @@ MIN_SEND_INTERVAL: float = 0.5 # sec
 
 PRECISION: int = 20
 
-LOG_DEBUG = True
+LOG_DEBUG = False
 LOG_ERROR = True
 LOG_INFO = True 
 LOG_WARNING = True

@@ -168,7 +168,7 @@ class TrendConfirmSignal:
 
         last_row = df.iloc[-1] 
         fast_val, slow_val = last_row['ema_fast'], last_row['ema_slow']
-        current_price = last_row['Close']
+        # current_price = last_row['Close']
 
         # logger.debug(
         #     f"📊 [{symbol}] Price: {current_price:.5g} | "
