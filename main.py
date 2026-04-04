@@ -3,6 +3,7 @@ import aiohttp
 import time
 from typing import *
 import traceback
+import pandas as pd
 
 from consts import MAIN_FREQUENTCY, SYMBOLS_FREQUENCY, SIGNAL_FREQUENCY, TREND_PATTERN, TG_ENABLED, STAKAN_PATTERN
 
@@ -36,6 +37,10 @@ class Core:
         # Переменные для WS стрима стакана
         self.stakan_stream: Optional[PhemexStakanStream] = None
         self.stakan_task: Optional[asyncio.Task] = None
+        
+        # 🛡 КЭШ СВЕЧЕЙ (Защита API и ускорение расчетов)
+        self.klines_cache: Dict[str, Tuple[float, pd.DataFrame]] = {}
+        self.klines_cache_ttl = 60.0  # Храним скачанные свечи 1 минуту
 
     async def get_session(self) -> aiohttp.ClientSession:
         async with self._session_lock:
@@ -88,7 +93,13 @@ class Core:
                 await asyncio.sleep(SYMBOLS_FREQUENCY)
 
     async def process_signals(self):
+        now = time.time()
         session = await self.get_session()
+        
+        # 🧹 Очистка старых свечей из кэша (Защита от утечки памяти)
+        keys_to_del = [sym for sym, (ts, _) in self.klines_cache.items() if now - ts > self.klines_cache_ttl]
+        for k in keys_to_del:
+            del self.klines_cache[k]
         
         try:
             price_data = await self.phm_public.get_hot_and_fair_prices(session)
@@ -106,23 +117,32 @@ class Core:
         precisions = self.phm_public.get_precisions()
 
         for signal_symbol, diff_percent in signals:
+            
+            # 0. ЯВНАЯ ПРОВЕРКА АНТИСПАМА
             if signal_symbol in self.signal_detector.ban_cache:
-                # logger.info(f"Сигнал в антиспаме {signal_symbol}.")
+                # logger.debug(f"Сигнал в антиспаме {signal_symbol}.")
                 continue
 
-            # 1. Проверка СТАКАНА (O(1) чтение из кэша детектора)
+            # 1. Проверка СТАКАНА
             if not self.stakan_detector.is_valid(signal_symbol):
                 logger.debug(f"📉 Стакан НЕ подтверждён для {signal_symbol}. Пропускаем.")
                 continue
 
+            # 2. Проверка ТРЕНДА (С использованием КЭША свечей)
             try:
-                # 2. Проверка ТРЕНДА (Самая тяжелая операция, выполняется последней)
-                klines = await self.phm_public.get_klines_basic(
-                    session=session,
-                    symbol=signal_symbol,
-                    interval=self.signal_confirm.tf,
-                    limit=int(self.signal_confirm.slow * 1.5),
-                )
+                if signal_symbol in self.klines_cache:
+                    klines = self.klines_cache[signal_symbol][1]
+                else:
+                    klines = await self.phm_public.get_klines_basic(
+                        session=session,
+                        symbol=signal_symbol,
+                        interval=self.signal_confirm.tf,
+                        limit=int(self.signal_confirm.slow * 1.5),
+                    )
+                    if not klines.empty:
+                        # Сохраняем скачанный DataFrame в кэш
+                        self.klines_cache[signal_symbol] = (now, klines)
+
             except Exception as e:
                 logger.error(f"❌ Ошибка загрузки свечей для {signal_symbol}: {e}")
                 continue 
@@ -147,7 +167,8 @@ class Core:
                 "stakan_msg": stakan_msg,
                 "trend_msg": trend_msg
             })
-            # ✅ ФИКС: Подтверждаем отправку в базовом детекторе только здесь!
+            
+            # ✅ ФИКС: Подтверждаем отправку (отправляем в бан_кэш)
             self.signal_detector.confirm_sent(signal_symbol)
             logger.info(f"✅ Готов сигнал по монете {signal_symbol}.")
 
