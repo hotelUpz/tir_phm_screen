@@ -63,12 +63,18 @@ class FairSignalDetector:
                     
                 if diff_time >= self.ttl and not is_sent:
                     confirmed_signals.append((symbol, diff_percent))
-                    self.signals_cache[symbol] = (record_time, diff_percent, True)
+                    # self.signals_cache[symbol] = (record_time, diff_percent, True)
             else:
                 if in_signal: 
                     self.signals_cache.pop(symbol, None)
 
         return confirmed_signals
+    
+    def confirm_sent(self, symbol: str):
+        """Вызывается ядром ТОЛЬКО ПОСЛЕ успешного прохождения всех фильтров (стакан, тренд)"""
+        if symbol in self.signals_cache:
+            record_time, diff, _ = self.signals_cache[symbol]
+            self.signals_cache[symbol] = (record_time, diff, True)
     
     
 class StakanDetector:
@@ -105,16 +111,30 @@ class StakanDetector:
         if spread <= self.max_spread:
             if symbol not in self._cache:
                 self._cache[symbol] = now
-            elif now - self._cache[symbol] >= self.ttl:
+            if now - self._cache[symbol] >= self.ttl:
                 self._valid.add(symbol)
         else:
             self._cache.pop(symbol, None)
             self._valid.discard(symbol)
 
+    # def is_valid(self, symbol: str) -> bool:
+    #     if not self.enabled:
+    #         return True
+    #     return symbol in self._valid
+
     def is_valid(self, symbol: str) -> bool:
         if not self.enabled:
             return True
-        return symbol in self._valid
+        if symbol in self._valid:
+            return True
+            
+        # ✅ ФИКС: Динамическая проверка "на лету", если WS молчит
+        if symbol in self._cache:
+            if time.time() - self._cache[symbol] >= self.ttl:
+                self._valid.add(symbol)
+                return True
+                
+        return False
     
 
 class TrendConfirmSignal:

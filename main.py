@@ -128,7 +128,7 @@ class Core:
                 logger.debug(f"📈 Тренд НЕ подтверждён для {signal_symbol}. Пропускаем.")
                 continue
             
-            stakan_msg = "+" if STAKAN_PATTERN.get("enable") else "N/A"
+            stakan_msg = "OK" if STAKAN_PATTERN.get("enable") else "N/A"
             trend_msg = trend if TREND_PATTERN.get(self.signal_confirm.tf, {}).get("enable") else "N/A"
             last_price = price_data.get(signal_symbol, {}).get("hot", 0)
             fair_price = price_data.get(signal_symbol, {}).get("fair", 0)
@@ -143,6 +143,8 @@ class Core:
                 "stakan_msg": stakan_msg,
                 "trend_msg": trend_msg
             })
+            # ✅ ФИКС: Подтверждаем отправку в базовом детекторе только здесь!
+            self.signal_detector.confirm_sent(signal_symbol)
             logger.info(f"✅ Готов сигнал по монете {signal_symbol}.")
 
         if valid_signals and TG_ENABLED:
