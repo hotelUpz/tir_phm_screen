@@ -110,11 +110,12 @@ class Core:
 
         if not price_data: return
 
-        signals = await self.signal_detector.check(price_data)
+        precisions = self.phm_public.get_precisions()
+
+        signals = await self.signal_detector.check(price_data, precisions)
         if not signals: return
 
         valid_signals = []
-        precisions = self.phm_public.get_precisions()
 
         for signal_symbol, diff_percent in signals:
             
@@ -156,7 +157,7 @@ class Core:
             trend_msg = trend if TREND_PATTERN.get(self.signal_confirm.tf, {}).get("enable") else "N/A"
             last_price = price_data.get(signal_symbol, {}).get("hot", 0)
             fair_price = price_data.get(signal_symbol, {}).get("fair", 0)
-            prec = precisions.get(signal_symbol, 0.0001)
+            prec, _ = precisions.get(signal_symbol, 0.0001)
 
             valid_signals.append({
                 "symbol": signal_symbol,

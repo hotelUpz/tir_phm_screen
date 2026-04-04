@@ -1,16 +1,13 @@
 import time
 import pandas as pd
 from typing import Optional, Dict, List, Tuple
-from consts import HOT_FAIR_PATTERN, STAKAN_PATTERN, TREND_PATTERN, BLACK_SET
-from c_log import UnifiedLogger
-
-logger = UnifiedLogger("signal")
-
-
-import time
-import pandas as pd
-from typing import Optional, Dict, List, Tuple
-from consts import HOT_FAIR_PATTERN, STAKAN_PATTERN, TREND_PATTERN, BLACK_SET
+from consts import (
+    HOT_FAIR_PATTERN,
+    STAKAN_PATTERN,
+    TREND_PATTERN,
+    MIN_LEVERAGE,
+    BLACK_SET,
+)
 from c_log import UnifiedLogger
 
 logger = UnifiedLogger("signal")
@@ -34,6 +31,7 @@ class FairSignalDetector:
     async def check(
         self,
         price_data: Dict[str, dict[str, float]],
+        precisions: Dict[str, tuple]
     ) -> List[Tuple[str, float]]:
         now = time.time()  
         confirmed_signals = []
@@ -41,6 +39,11 @@ class FairSignalDetector:
         for symbol, prices in price_data.items():
             if symbol in BLACK_SET:
                 continue
+
+            precision = precisions.get(symbol)
+
+            if not precision: continue
+            if MIN_LEVERAGE is not None and precision[1] <= MIN_LEVERAGE: continue
             
             last_price = prices.get("hot")
             fair_price = prices.get("fair")

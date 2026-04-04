@@ -1,4 +1,5 @@
 import os 
+from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,6 +14,9 @@ HOT_FAIR_PATTERN = {
 }
 
 # add signal
+MIN_LEVERAGE: Optional[int] = 10 # None -- откл проверку. Если максимально допустимое плечо монеты <= MIN_LEVERAGE, то сигнал по ней скипается.
+
+
 STAKAN_PATTERN = {
     "enable": True,
     "depth": 5,

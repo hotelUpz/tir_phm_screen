@@ -64,10 +64,11 @@ class PhemexPublicApi:
         precisions = {}
         for sym, item in self.instruments.items():
             raw_tick = item.get("tickSize")
+            max_lvg = float(item.get("limitOrderMaxLeverage") or item.get("maxLeverage") or 10.0)
             try:
-                precisions[sym] = float(raw_tick) if raw_tick else 0.0001
+                precisions[sym] = (float(raw_tick) if raw_tick else 0.0001, max_lvg)
             except:
-                precisions[sym] = 0.0001
+                precisions[sym] = (0.0001, 10)
         return precisions
 
     async def get_hot_and_fair_prices(self, session: aiohttp.ClientSession) -> dict[str, dict[str, float]] | None:
