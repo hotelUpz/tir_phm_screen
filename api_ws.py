@@ -147,7 +147,7 @@ class PhemexStakanStream:
 
         ts = payload.get("timestamp")
         ts_i = self._to_int(ts, int(time.time() * 1000))
-        event_ms = ts_i // 1_000_000 if ts_i > 1_000_000_000_000 else ts_i
+        event_ms = ts_i // 1_000_000 if ts_i > 10**16 else ts_i
 
         return DepthTop(symbol=sym_u, bids=top_b, asks=top_a, event_time_ms=int(event_ms))
 

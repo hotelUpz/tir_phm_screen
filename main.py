@@ -122,7 +122,7 @@ class Core:
         if not signals: return
 
         valid_signals = []
-        
+
         precisions = self.phm_public.get_precisions()
         if not precisions:
             logger.warning(f"❌ Не удается получить precisions.")
@@ -130,10 +130,10 @@ class Core:
 
         for signal_symbol, diff_percent in signals:
             
-            # 0. ЯВНАЯ ПРОВЕРКА АНТИСПАМА
-            if signal_symbol in self.signal_detector.ban_cache:
-                # logger.debug(f"Сигнал в антиспаме {signal_symbol}.")
-                continue
+            # # 0. ЯВНАЯ ПРОВЕРКА АНТИСПАМА
+            # if signal_symbol in self.signal_detector.ban_cache:
+            #     # logger.debug(f"Сигнал в антиспаме {signal_symbol}.")
+            #     continue
 
             # 1. Получаем точность и плечо (с безопасным дефолтом!)
             prec, max_lvg = precisions.get(signal_symbol, (0.0001, 10.0))
@@ -158,9 +158,9 @@ class Core:
                         interval=self.signal_confirm.tf,
                         limit=int(self.signal_confirm.slow * 1.5),
                     )
-                    if not klines.empty:
-                        # Сохраняем скачанный DataFrame в кэш
-                        self.klines_cache[signal_symbol] = (now, klines)
+                    # if not klines.empty:
+                    #     # Сохраняем скачанный DataFrame в кэш
+                    self.klines_cache[signal_symbol] = (now, klines)
 
             except Exception as e:
                 logger.error(f"❌ Ошибка загрузки свечей для {signal_symbol}: {e}")

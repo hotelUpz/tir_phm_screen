@@ -59,7 +59,7 @@ class PhemexPublicApi:
         except Exception as ex:
             logger.exception(f"{ex} in {inspect.currentframe().f_code.co_name}")
 
-    def get_precisions(self) -> dict[str, float]:
+    def get_precisions(self) -> dict[str, tuple[float, float]]:
         """Возвращает шаг изменения цены (tick size)"""
         precisions = {}
         for sym, item in self.instruments.items():
