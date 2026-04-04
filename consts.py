@@ -33,12 +33,12 @@ TREND_PATTERN: dict = {
 }
 
 
-FLUSH_SIGNAL_TTL: float = 5 * 60  # 5 минут. Время жизни сигнала поистечение которого он сбрасывается из кеша сигналов. -- надо вынести глобально а не только для ценового спреда.
+FLUSH_SIGNAL_TTL: float = 2 * 60  # 5 минут. Время жизни сигнала поистечение которого он сбрасывается из кеша сигналов. -- надо вынести глобально а не только для ценового спреда.
 
 
 MAIN_FREQUENTCY: float = 0.1 # sec
 SIGNAL_FREQUENCY: float = 1 # sec
-SYMBOLS_FREQUENCY: float = 300 # sec
+SYMBOLS_FREQUENCY: float = 60 # sec
 
 BLACK_SET: set = set()     # черный список монет. Формат монеты: "BTCUSDT" и т.д.
 
