@@ -48,8 +48,7 @@ class FairSignalDetector:
 
             lev_key = next((item for item in self.diff_pct_lvg_depend.keys() if item[0] <= max_lvg <= item[1]), (20, 40))
             diff_pct = self.diff_pct_lvg_depend.get(lev_key).get("spread", 5.0)        
-            ttl = self.diff_pct_lvg_depend.get(lev_key).get("ttl", 5.0)
-            
+            ttl = self.diff_pct_lvg_depend.get(lev_key).get("ttl", 5.0)            
 
             # 1. Проверяем БАН-ЛИСТ (независимо от текущей цены!)
             if symbol in self.ban_cache:

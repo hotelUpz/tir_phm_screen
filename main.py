@@ -203,7 +203,8 @@ class Core:
                 "diff_percent": round(diff_percent, 2),
                 "price_precision": prec,
                 "stakan_msg": stakan_msg,
-                "trend_msg": trend_msg
+                "trend_msg": trend_msg,
+                "max_lvg": max_lvg,
             })
             
             # ✅ ФИКС: Подтверждаем отправку (отправляем в бан_кэш)
