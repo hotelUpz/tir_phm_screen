@@ -139,17 +139,17 @@ class Core:
             await self.close_session() 
             return
 
-        if not price_data: return        
-
-        signals = await self.signal_detector.check(price_data)
-        if not signals: return
-
-        valid_signals = []
+        if not price_data: return   
 
         precisions = self.phm_public.get_precisions()
         if not precisions:
             logger.warning(f"❌ Не удается получить precisions.")
-            return
+            return     
+
+        signals = await self.signal_detector.check(price_data, precisions)
+        if not signals: return
+
+        valid_signals = []
 
         for signal_symbol, diff_percent in signals:
 
@@ -158,7 +158,9 @@ class Core:
             
             # 2. ФИЛЬТР ПЛЕЧА (скипаем всё, что от 1 до 10)
             # Конфиг можно тянуть из consts, например LEVERAGE_SKIP_RANGE = (1, 10)
-            if MIN_LEVERAGE is not None and max_lvg <= MIN_LEVERAGE: continue
+            if MIN_LEVERAGE is not None and max_lvg <= MIN_LEVERAGE:
+                logger.debug(f"📉 Скип по плечу для {signal_symbol}. {max_lvg} <= {MIN_LEVERAGE}")
+                continue
 
             # 3. Проверка СТАКАНА
             if not self.stakan_detector.is_valid(signal_symbol):

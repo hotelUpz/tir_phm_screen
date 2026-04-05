@@ -49,3 +49,26 @@
 # if __name__ == "__main__":
 #     # Подставь сюда любую монету для проверки
 #     asyncio.run(test_single_symbol("SIRENUSDT"))
+
+max_lvg = 40
+HOT_FAIR_PATTERN = {
+    "lever_dependencies": {
+        (20, 40): {
+            "spread": 5.0,      # % отклонения справедливой цены от горячей. fear > hot
+            "ttl": 10,          # sec. Если сигнал продержался в течение этого времени то его считать подтвержденным.
+        },
+        (41, 70): {
+            "spread": 2.5,       
+            "ttl": 10,     
+        },
+        (71, 500): {
+            "spread": 1.5,       
+            "ttl": 10,    
+        },
+    }
+
+}
+
+lev_key = next((item for item in HOT_FAIR_PATTERN.get("lever_dependencies", {}).keys() if item[0] <= max_lvg <= item[1]), (20, 40))
+
+print(lev_key)

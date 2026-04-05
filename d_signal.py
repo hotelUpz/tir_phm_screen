@@ -24,13 +24,13 @@ class FairSignalDetector:
         # Хранит время начала бана: {symbol: ban_start_time}
         self.ban_cache: Dict[str, float] = {}      
         
-        self.diff_pct = abs(HOT_FAIR_PATTERN.get("spread", 1.0))
-        self.ttl = HOT_FAIR_PATTERN.get("ttl", 6.0)
+        self.diff_pct_lvg_depend = HOT_FAIR_PATTERN.get("lever_dependencies", {})
         self.flush_ttl = FLUSH_SIGNAL_TTL or 0.0
 
     async def check(
         self,
-        price_data: Dict[str, dict[str, float]]
+        price_data: Dict[str, dict[str, float]],
+        precesions: Dict
     ) -> List[Tuple[str, float]]:
         now = time.time()  
         confirmed_signals = []
@@ -43,6 +43,13 @@ class FairSignalDetector:
             fair_price = prices.get("fair")
             if not last_price or not fair_price:
                 continue
+
+            _, max_lvg = precesions.get(symbol, 100)
+
+            lev_key = next((item for item in self.diff_pct_lvg_depend.keys() if item[0] <= max_lvg <= item[1]), (20, 40))
+            diff_pct = self.diff_pct_lvg_depend.get(lev_key).get("spread", 5.0)        
+            ttl = self.diff_pct_lvg_depend.get(lev_key).get("ttl", 5.0)
+            
 
             # 1. Проверяем БАН-ЛИСТ (независимо от текущей цены!)
             if symbol in self.ban_cache:
@@ -57,15 +64,16 @@ class FairSignalDetector:
                     continue
 
             # 2. Основная логика удержания сигнала
-            diff_percent = (fair_price - last_price) / last_price * 100            
+            diff_percent = (fair_price - last_price) / last_price * 100
+            # logger.debug(f"{symbol}: Δ {diff_pct}, cur: {diff_percent}, ttl: {ttl}")         
 
-            if diff_percent >= self.diff_pct: 
+            if diff_percent >= diff_pct: 
                 # Фиксируем время старта, если монеты еще нет в кэше
                 if symbol not in self.signals_cache:
                     self.signals_cache[symbol] = now
                     
                 # Если удержали ttl — отдаем ядру
-                if now - self.signals_cache[symbol] >= self.ttl:
+                if now - self.signals_cache[symbol] >= ttl:
                     confirmed_signals.append((symbol, diff_percent))
                     # Внимание: мы не баним монету здесь! Ждем команды от ядра.
             else:
